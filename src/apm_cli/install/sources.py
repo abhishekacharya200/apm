@@ -26,6 +26,7 @@ substantially different shape (no PackageInfo, dedicated tracking on
 
 from __future__ import annotations
 
+import re
 from abc import ABC, abstractmethod
 from dataclasses import dataclass, field
 from datetime import datetime
@@ -62,6 +63,10 @@ from apm_cli.utils.short_sha import format_short_sha
 if TYPE_CHECKING:
     from apm_cli.install.context import InstallContext
     from apm_cli.models.apm_package import PackageInfo
+
+# A full Git commit identity, the only shape a resolved reference may carry as a
+# source pin. Short SHAs and branch names stay on the ``cached`` sentinel.
+_FULL_COMMIT_RE = re.compile(r"(?:[0-9a-f]{40}|[0-9a-f]{64})")
 
 
 @dataclass
@@ -504,13 +509,26 @@ class CachedDependencySource(DependencySource):
         if not cached_package.source:
             cached_package.source = dep_ref.repo_url
 
+        # Determine commit SHA for the cached path. See _resolve_cached_commit
+        # for the invariant ("recorded SHA must match disk identity") and the
+        # priority rules (PR #1158 -- branch-ref drift fix).
+        cached_commit = self._resolve_cached_commit()
+
+        # A cache hit without a live resolved reference still knows the commit
+        # the bytes came from, and downstream consumers read it from here: the
+        # Codex native path treats a resolved commit as a source pin, so the
+        # ``cached`` sentinel made a locked SHA look like an invalid pin (#3388).
         resolved_or_cached_ref = (
             resolved_ref
             if resolved_ref
             else ResolvedReference(
                 original_ref=dep_ref.reference or "default",
                 ref_type=GitReferenceType.BRANCH,
-                resolved_commit="cached",
+                resolved_commit=(
+                    cached_commit
+                    if isinstance(cached_commit, str) and _FULL_COMMIT_RE.fullmatch(cached_commit)
+                    else "cached"
+                ),
                 ref_name=dep_ref.reference or "default",
             )
         )
@@ -529,11 +547,6 @@ class CachedDependencySource(DependencySource):
         depth = node.depth if node else 1
         resolved_by = locked_parent_identity(ctx, node)
         _is_dev = node.is_dev if node else False
-
-        # Determine commit SHA for the cached path. See _resolve_cached_commit
-        # for the invariant ("recorded SHA must match disk identity") and the
-        # priority rules (PR #1158 -- branch-ref drift fix).
-        cached_commit = self._resolve_cached_commit()
 
         # Determine if cached package came from registry
         _cached_registry = None
