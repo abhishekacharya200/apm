@@ -997,6 +997,39 @@ class MCPClientAdapter(ABC):
         return None
 
     @classmethod
+    def _ensure_docker_run_args(
+        cls,
+        runtime_args: list[Any] | None,
+    ) -> list[Any]:
+        """Return runtime arguments with Docker's 'run' subcommand and stdio flags.
+
+        If runtime_args is empty, defaults to ['run', '-i', '--rm'].
+        If runtime_args begins with 'run', returns runtime_args as is.
+        If runtime_args contains options without a leading 'run' subcommand
+        (e.g. options-only metadata from OCI registries), prepends 'run' and
+        ensures '-i' and '--rm' are present unless already specified.
+
+        Args:
+            runtime_args: Resolved runtime arguments from the package entry.
+
+        Returns:
+            list: Arguments with leading 'run', '-i', '--rm' and any options.
+        """
+        if not runtime_args:
+            return ["run", "-i", "--rm"]
+        args = list(runtime_args)
+        if args and args[0] == "run":
+            return args
+        has_interactive = any(arg in ("-i", "--interactive") for arg in args)
+        has_rm = "--rm" in args
+        prefix = ["run"]
+        if not has_interactive:
+            prefix.append("-i")
+        if not has_rm:
+            prefix.append("--rm")
+        return [*prefix, *args]
+
+    @classmethod
     def _ensure_docker_image_arg(
         cls,
         runtime_args: list[Any],

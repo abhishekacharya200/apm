@@ -199,6 +199,35 @@ class TestInferRegistryNameOci(unittest.TestCase):
 # ---------------------------------------------------------------------------
 
 
+class TestEnsureDockerRunArgs(unittest.TestCase):
+    """Runtime arguments ensure leading 'run', '-i', and '--rm' operands."""
+
+    def test_default_run_args_when_none_or_empty(self):
+        self.assertEqual(MCPClientAdapter._ensure_docker_run_args(None), ["run", "-i", "--rm"])
+        self.assertEqual(MCPClientAdapter._ensure_docker_run_args([]), ["run", "-i", "--rm"])
+
+    def test_run_subcommand_already_present_is_preserved(self):
+        base = ["run", "-i", "--rm", "-v", "/w:/w"]
+        self.assertEqual(MCPClientAdapter._ensure_docker_run_args(base), base)
+
+    def test_options_only_runtime_args_prepends_run_and_stdio_flags(self):
+        args = ["--network", "none"]
+        self.assertEqual(
+            MCPClientAdapter._ensure_docker_run_args(args),
+            ["run", "-i", "--rm", "--network", "none"],
+        )
+
+    def test_existing_interactive_or_rm_flags_not_duplicated(self):
+        self.assertEqual(
+            MCPClientAdapter._ensure_docker_run_args(["-i", "--network", "none"]),
+            ["run", "--rm", "-i", "--network", "none"],
+        )
+        self.assertEqual(
+            MCPClientAdapter._ensure_docker_run_args(["--rm", "--network", "none"]),
+            ["run", "-i", "--rm", "--network", "none"],
+        )
+
+
 class TestEnsureDockerImageArg(unittest.TestCase):
     """The image operand is present exactly once, after the run options."""
 
@@ -511,6 +540,41 @@ class TestOciLauncherAcrossTargets(unittest.TestCase):
             config.get("args"),
             ["run", "-i", "--rm", "ghcr.io/example/playwright-mcp:1.2.3"],
         )
+
+    def test_options_only_runtime_arguments_prepends_docker_run_across_adapters(self):
+        """Issue #3404: options-only runtimeArguments must prepend docker run -i --rm."""
+        package = {
+            "name": OCI_IMAGE,
+            "registry_name": "oci",
+            "runtime_hint": "docker",
+            "transport": {"type": "stdio"},
+            "runtime_arguments": [{"type": "named", "name": "--network", "value": "none"}],
+            "package_arguments": [{"type": "named", "name": "--definition-snapshot"}],
+        }
+        for name, make_adapter in (
+            ("copilot", _make_copilot),
+            ("codex", _make_codex),
+            ("gemini", _make_gemini),
+            ("vscode", _make_vscode),
+        ):
+            with self.subTest(adapter=name):
+                rendered = make_adapter()._format_server_config(
+                    {"id": "s", "name": "s", "packages": [package]}
+                )
+                config = rendered[0] if isinstance(rendered, tuple) else rendered
+                self.assertEqual(config.get("command"), "docker")
+                self.assertEqual(
+                    config["args"],
+                    [
+                        "run",
+                        "-i",
+                        "--rm",
+                        "--network",
+                        "none",
+                        OCI_IMAGE,
+                        "--definition-snapshot",
+                    ],
+                )
 
 
 if __name__ == "__main__":
