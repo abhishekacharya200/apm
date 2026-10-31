@@ -921,6 +921,23 @@ class TestForwardedStdioEnv:
         assert cfg["env_vars"] == ["FIGMA_API_KEY"]
         assert cfg["env"] == {}
 
+    @pytest.mark.parametrize("value", [" ${TOKEN} ", "${TOKEN}\n"])
+    def test_value_with_surrounding_whitespace_is_not_forwarded(
+        self, tmp_path: Path, value: str
+    ) -> None:
+        adapter = _make_adapter(project_root=tmp_path)
+        with patch.dict(os.environ, {"TOKEN": "example-token"}):
+            cfg = adapter._format_server_config(_raw_stdio_server(TOKEN=value))
+        assert "env_vars" not in cfg
+        assert "TOKEN" in cfg["env"]
+
+    def test_extra_cannot_request_launch_environment_variables(self, tmp_path: Path) -> None:
+        adapter = _make_adapter(project_root=tmp_path)
+        server = _raw_stdio_server(LITERAL="value")
+        server["_extra"] = {"env_vars": ["PRIVATE_TOKEN"]}
+        cfg = adapter._format_server_config(server)
+        assert "env_vars" not in cfg
+
     def test_literal_value_keeps_env_block(self, tmp_path: Path) -> None:
         adapter = _make_adapter(project_root=tmp_path)
         cfg = adapter._format_server_config(_raw_stdio_server(LOG_LEVEL="debug"))

@@ -219,6 +219,26 @@ class CodexClientAdapter(MCPClientAdapter):
             comparable.pop("id")
         return comparable == expected
 
+    def matches_legacy_managed_server_config(self, native: object, expected: dict) -> bool:
+        """Recognize a stdio entry written before ``${VAR}`` values moved to ``env_vars``.
+
+        The older formatter stored either the resolved value or the literal
+        reference, so anything else is a manual edit and stays a conflict.
+        """
+        names = expected.get("env_vars")
+        native_env = native.get("env") if isinstance(native, dict) else None
+        if not names or not isinstance(native_env, dict) or "env_vars" in native:
+            return False
+        legacy_env = dict(expected.get("env") or {})
+        for name in names:
+            value = native_env.get(name)
+            if value is None or value not in (f"${{{name}}}", os.getenv(name)):
+                return False
+            legacy_env[name] = value
+        legacy = {key: value for key, value in expected.items() if key != "env_vars"}
+        legacy["env"] = legacy_env
+        return self.matches_managed_server_config(native, legacy)
+
     def update_config(self, config_updates):
         """Update the Codex CLI MCP configuration.
 
@@ -694,7 +714,7 @@ class CodexClientAdapter(MCPClientAdapter):
         forwarded_env: list[str] = []
         for name, raw_value in raw_env.items():
             if isinstance(raw_value, str):
-                reference = _ENV_VAR_RE.fullmatch(raw_value.strip())
+                reference = _ENV_VAR_RE.fullmatch(raw_value)
                 if reference and reference.group(1) == name:
                     forwarded_env.append(name)
                     continue
