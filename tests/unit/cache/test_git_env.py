@@ -1661,7 +1661,7 @@ class TestUncachedFallbackLineEndings:
         src.mkdir()
         subprocess.run([git, "init", "-q", "-b", "main", str(src)], check=True)
         tracked = src / "f.txt"
-        tracked.write_text("a\nb\n", encoding="utf-8")
+        tracked.write_bytes(b"a\nb\n")
 
         def _commit(message: str) -> None:
             subprocess.run(
@@ -1691,7 +1691,7 @@ class TestUncachedFallbackLineEndings:
             text=True,
             check=True,
         ).stdout.strip()
-        tracked.write_text("a\nb\nc\n", encoding="utf-8")
+        tracked.write_bytes(b"a\nb\nc\n")
         _commit("two")
 
         # Host-level config that the clone snapshot freezes into the child env.
