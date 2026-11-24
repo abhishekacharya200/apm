@@ -1,0 +1,1 @@
+- `apm plugin init <name>` rejects an invalid plugin name before creating the project directory, so nothing is left behind. -- by @abhishekacharya200 (#PR)

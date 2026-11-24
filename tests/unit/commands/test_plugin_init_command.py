@@ -72,6 +72,18 @@ class TestPluginInitCommand:
             finally:
                 os.chdir(self.original_dir)
 
+    def test_plugin_init_invalid_name_creates_no_directory(self):
+        with tempfile.TemporaryDirectory() as tmp:
+            os.chdir(tmp)
+            try:
+                result = self.runner.invoke(cli, ["plugin", "init", "MyPlugin", "--yes"])
+                assert result.exit_code == 1, result.output
+                assert "Invalid plugin name 'MyPlugin'" in result.output
+                assert Path.cwd().resolve() == Path(tmp).resolve()
+                assert list(Path(tmp).iterdir()) == []
+            finally:
+                os.chdir(self.original_dir)
+
     def test_plugin_init_help_advertises_apm_marketplace_init(self):
         """Group help points users at the sibling marketplace verb."""
         result = self.runner.invoke(cli, ["plugin", "--help"])
