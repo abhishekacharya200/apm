@@ -226,6 +226,42 @@ class TestInitNameOwnerFlags:
         data = yaml.safe_load((tmp_path / "apm.yml").read_text(encoding="utf-8"))
         assert data["name"] == "cool-tools"
 
+    def test_custom_name_overrides_existing_apm_yml_name(
+        self,
+        runner,
+        tmp_path,
+        monkeypatch,
+    ):
+        from apm_cli.marketplace.yml_schema import load_marketplace_from_apm_yml
+
+        monkeypatch.chdir(tmp_path)
+        apm_yml = tmp_path / "apm.yml"
+        apm_yml.write_text(
+            "name: my-app\nversion: 1.0.0\ndescription: existing\n",
+            encoding="utf-8",
+        )
+        result = runner.invoke(marketplace, ["init", "--name", "cool-tools"])
+        assert result.exit_code == 0, result.output
+        data = yaml.safe_load(apm_yml.read_text(encoding="utf-8"))
+        assert data["name"] == "my-app"
+        assert data["marketplace"]["name"] == "cool-tools"
+        assert load_marketplace_from_apm_yml(apm_yml).name == "cool-tools"
+
+    def test_name_matching_existing_apm_yml_adds_no_override(
+        self,
+        runner,
+        tmp_path,
+        monkeypatch,
+    ):
+        monkeypatch.chdir(tmp_path)
+        (tmp_path / "apm.yml").write_text(
+            "name: my-app\nversion: 1.0.0\ndescription: existing\n",
+            encoding="utf-8",
+        )
+        result = runner.invoke(marketplace, ["init", "--name", "my-app"])
+        assert result.exit_code == 0, result.output
+        assert "name" not in _load_marketplace_block(tmp_path / "apm.yml")
+
     def test_custom_owner(self, runner, tmp_path, monkeypatch):
         monkeypatch.chdir(tmp_path)
         result = runner.invoke(marketplace, ["init", "--owner", "my-org"])

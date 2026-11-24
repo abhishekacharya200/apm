@@ -1,0 +1,1 @@
+- `apm marketplace init --name` in a project that already has `apm.yml` now writes the name as `marketplace.name` instead of ignoring it. -- by @abhishekacharya200 (#PR)

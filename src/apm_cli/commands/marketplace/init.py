@@ -90,7 +90,12 @@ def init(force, no_gitignore_check, name, owner, verbose):
         sys.exit(1)
 
     block_data = rt.load(render_marketplace_block(owner=owner))
-    data["marketplace"] = block_data["marketplace"]
+    marketplace_block = block_data["marketplace"]
+    # A new apm.yml already carries --name at the top level. An existing one
+    # keeps its project name, so record --name as the marketplace override.
+    if not scaffolded_apm_yml and name and name != data.get("name"):
+        marketplace_block.insert(0, "name", name)
+    data["marketplace"] = marketplace_block
 
     out = StringIO()
     rt.dump(data, out)
